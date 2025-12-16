@@ -4,23 +4,28 @@ import { toast } from "react-hot-toast";
 
 import { Product } from "@/types";
 
-export interface CartItem {
-  id: string;
-  name: string;
-  price: number;
+interface CartItem extends Product {
   quantity: number;
-  selectedSize: string;
-  selectedColor: string;
-  image: string;
+  itemKey: string;
 }
+
+const buildKey = (id: string, colorId?: string | null, sizeId?: string | null) =>
+  `${id}__${colorId ?? "none"}__${sizeId ?? "none"}`;
+
+const normalizeItems = (items: Partial<CartItem>[]): CartItem[] =>
+  items.map((item) => {
+    const key = item.itemKey ?? buildKey(item.id as string, item.selectedColorId, item.selectedSizeId);
+    const quantity = typeof item.quantity === "number" ? item.quantity : 1;
+    return { ...(item as Product), itemKey: key, quantity };
+  });
 
 interface CartStore {
   items: CartItem[];
-  addItem: (data: CartItem) => void;
-  removeItem: (id: string, selectedSize?: string, selectedColor?: string) => void;
+  addItem: (data: Product) => void;
+  removeItem: (id: string, colorId?: string | null, sizeId?: string | null) => void;
   removeAll: () => void;
-  increaseQuantity: (id: string, selectedSize?: string, selectedColor?: string) => void;
-  decreaseQuantity: (id: string, selectedSize?: string, selectedColor?: string) => void;
+  increaseQuantity: (id: string, colorId?: string | null, sizeId?: string | null) => void;
+  decreaseQuantity: (id: string, colorId?: string | null, sizeId?: string | null) => void;
   getTotalQuantity: () => number; // ✅ Added
 }
 
@@ -28,68 +33,52 @@ const useCart = create(
   persist<CartStore>(
     (set, get) => ({
       items: [],
-      addItem: (data: CartItem) => {
-        const currentItems = get().items;
+      addItem: (data: Product) => {
+        const currentItems = normalizeItems(get().items);
+        const key = buildKey(data.id, data.selectedColorId, data.selectedSizeId);
         const existingItem = currentItems.find(
           (item) =>
-            item.id === data.id &&
-            item.selectedColor === data.selectedColor &&
-            item.selectedSize === data.selectedSize
+            item.itemKey === key
         );
 
         if (existingItem) {
-          return get().increaseQuantity(data.id, data.selectedSize, data.selectedColor);
+          return get().increaseQuantity(data.id, data.selectedColorId, data.selectedSizeId);
         }
 
-        set({ items: [...currentItems, { ...data, quantity: 1 }] });
+        set({ items: [...currentItems, { ...data, quantity: 1, itemKey: key }] });
         toast.success("Product added to cart");
       },
-      removeItem: (id: string, selectedSize?: string, selectedColor?: string) => {
-        set({
-          items: get().items.filter(
-            (item) =>
-              !(
-                item.id === id &&
-                (selectedSize ? item.selectedSize === selectedSize : true) &&
-                (selectedColor ? item.selectedColor === selectedColor : true)
-              )
-          ),
-        });
+      removeItem: (id: string, colorId?: string | null, sizeId?: string | null) => {
+        const currentItems = normalizeItems(get().items);
+        const key = buildKey(id, colorId, sizeId);
+        set({ items: currentItems.filter(item => item.itemKey !== key) });
         toast.success("Product removed from cart");
       },
       removeAll: () => set({ items: [] }),
-      increaseQuantity: (id: string, selectedSize?: string, selectedColor?: string) => {
-        const updated = get().items.map(item =>
-          item.id === id &&
-          (!selectedSize || item.selectedSize === selectedSize) &&
-          (!selectedColor || item.selectedColor === selectedColor)
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+      increaseQuantity: (id: string, colorId?: string | null, sizeId?: string | null) => {
+        const key = buildKey(id, colorId, sizeId);
+        const currentItems = normalizeItems(get().items);
+        const updated = currentItems.map(item =>
+          item.itemKey === key ? { ...item, quantity: item.quantity + 1 } : item
         );
         set({ items: updated });
       },
-      decreaseQuantity: (id: string, selectedSize?: string, selectedColor?: string) => {
-        const existingItem = get().items.find(
-          (item) =>
-            item.id === id &&
-            (!selectedSize || item.selectedSize === selectedSize) &&
-            (!selectedColor || item.selectedColor === selectedColor)
-        );
+      decreaseQuantity: (id: string, colorId?: string | null, sizeId?: string | null) => {
+        const key = buildKey(id, colorId, sizeId);
+        const currentItems = normalizeItems(get().items);
+        const existingItem = currentItems.find(item => item.itemKey === key);
         if (existingItem?.quantity === 1) {
-          get().removeItem(id, selectedSize, selectedColor);
+          get().removeItem(id, colorId, sizeId);
         } else {
-          const updated = get().items.map(item =>
-            item.id === id &&
-            (!selectedSize || item.selectedSize === selectedSize) &&
-            (!selectedColor || item.selectedColor === selectedColor)
-              ? { ...item, quantity: item.quantity - 1 }
-              : item
+          const updated = currentItems.map(item =>
+            item.itemKey === key ? { ...item, quantity: item.quantity - 1 } : item
           );
           set({ items: updated });
         }
       },
       getTotalQuantity: () => {
-        return get().items.reduce((total, item) => total + item.quantity, 0);
+        const currentItems = normalizeItems(get().items);
+        return currentItems.reduce((total, item) => total + item.quantity, 0);
       },
     }),
     {

@@ -53,22 +53,9 @@ const BottomNav = () => {
   }
 
   const onAddToCart = () => {
-    if (!currentProduct) return;
-
-    const defaultSize = currentProduct.sizes?.[0] ?? "Default";
-    const defaultColor = currentProduct.colors?.[0] ?? "Default";
-    const imageFromColor =
-      currentProduct.colorImages?.[defaultColor] ?? currentProduct.images?.[0]?.url ?? "";
-
-    cart.addItem({
-      id: currentProduct.id,
-      name: currentProduct.name,
-      price: currentProduct.price,
-      quantity: 1,
-      selectedSize: defaultSize,
-      selectedColor: defaultColor,
-      image: imageFromColor,
-    });
+    if (currentProduct) {
+      cart.addItem(currentProduct);
+    }
   };
 
   const isProductPage = pathname.startsWith('/products/');

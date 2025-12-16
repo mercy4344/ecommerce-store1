@@ -6,7 +6,7 @@ import IconButton from "./icon-button";
 import { Expand, ShoppingCart } from "lucide-react";
 import Currency from "./currency";
 import { useRouter } from "next/navigation";
-import { MouseEventHandler, useMemo, useState } from "react";
+import { MouseEventHandler, useState } from "react";
 import usePreviewModal from "@/hooks/use-preview-modal";
 import useCart from "@/hooks/use-cart";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,40 +32,20 @@ const ProductCard: React.FC<ProductCardProps> = ({
             previewModal.onOpen(data);
         }
 
-        const primaryImage = useMemo(() => {
-          if (data.colorImages && data.colors?.length) {
-            const first = data.colors[0];
-            if (first && data.colorImages[first]) return data.colorImages[first];
-          }
-          if (data.images && data.images.length > 0) return data.images[0].url;
-          return "";
-        }, [data]);
-
-        const isValidColor = (color: string | null | undefined) => {
-          if (!color) return false;
-          if (typeof window === "undefined") return true;
-          const s = new Option().style;
-          s.color = color;
-          return s.color !== "";
-        };
-
         const onAddToCart: MouseEventHandler<HTMLButtonElement> = (event) => {
             event.stopPropagation();
-            // Default to first size/color if available
-            const defaultColor = data.colors?.[0];
-            const defaultSize = data.sizes?.[0];
-            if (!defaultColor || !defaultSize) return;
+
+            const selectedColorId = data.selectedColorId ?? data.colors?.[0]?.id ?? null;
+            const selectedSizeId = data.selectedSizeId ?? data.sizes?.[0]?.id ?? null;
+            const selectedColor = data.colors?.find(c => c.id === selectedColorId) ?? null;
+            const selectedSize = data.sizes?.find(s => s.id === selectedSizeId) ?? null;
 
             cart.addItem({
-              id: data.id,
-              name: data.name,
-              price: data.price,
-              quantity: 1,
-              selectedColor: defaultColor,
-              selectedSize: defaultSize,
-              image:
-                (defaultColor && data.colorImages?.[defaultColor]) ||
-                primaryImage,
+                ...data,
+                selectedColorId,
+                selectedSizeId,
+                selectedColor,
+                selectedSize,
             });
         }
 
@@ -77,15 +57,13 @@ const ProductCard: React.FC<ProductCardProps> = ({
              {!imageLoaded && (
                <Skeleton className="absolute inset-0 h-full w-full" />
              )}
-             {primaryImage && (
-              <Image
-                src={primaryImage}
+             <Image
+                src={data.images[0].url}
                 fill
-                alt={data.name}
+                alt="Product Image"
                 className="aspect-square object-cover rounded-md"
                 onLoadingComplete={() => setImageLoaded(true)}
               />
-             )}
               <div className="opacity-0 group-hover:opacity-100 transition absolute w-full px-6 bottom-5">
                     <div className="flex gap-x-6 justify-center">
                     <IconButton
@@ -112,18 +90,8 @@ const ProductCard: React.FC<ProductCardProps> = ({
               </div>
             )}
            </div>
-           <div className="flex items-center justify-between">
+           <div className="flex items-center">
             {imageLoaded ? <Currency value={data?.price} /> : <Skeleton className="h-4 w-16" />}
-            <div className="flex items-center gap-1">
-              {data.colors?.slice(0,4).map((color) => (
-                <span
-                  key={color}
-                  className="w-3 h-3 rounded-full border"
-                  style={{ backgroundColor: isValidColor(color) ? color : "#e5e7eb" }}
-                  aria-label={color}
-                />
-              ))}
-            </div>
            </div>
         </div>
      );

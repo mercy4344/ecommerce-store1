@@ -28,6 +28,7 @@ type CarouselContextProps = {
   scrollNext: () => void
   canScrollPrev: boolean
   canScrollNext: boolean
+  slideCount: number
 } & CarouselProps
 
 const CarouselContext = React.createContext<CarouselContextProps | null>(null)
@@ -67,23 +68,40 @@ const Carousel = React.forwardRef<
     )
     const [canScrollPrev, setCanScrollPrev] = React.useState(false)
     const [canScrollNext, setCanScrollNext] = React.useState(false)
+    const [slideCount, setSlideCount] = React.useState(0)
 
-    const onSelect = React.useCallback((api: CarouselApi) => {
-      if (!api) {
-        return
-      }
-
-      setCanScrollPrev(api.canScrollPrev())
-      setCanScrollNext(api.canScrollNext())
-    }, [])
+    const syncControls = React.useCallback(
+      (api: CarouselApi) => {
+        if (!api) return
+        const slides = api.slideNodes().length
+        const hasMultiple = slides > 1
+        setSlideCount(slides)
+        // When loop is enabled, allow arrows as long as multiple slides exist
+        if (opts?.loop) {
+          setCanScrollPrev(hasMultiple)
+          setCanScrollNext(hasMultiple)
+          return
+        }
+        setCanScrollPrev(hasMultiple && api.canScrollPrev())
+        setCanScrollNext(hasMultiple && api.canScrollNext())
+      },
+      [opts?.loop]
+    )
 
     const scrollPrev = React.useCallback(() => {
-      api?.scrollPrev()
-    }, [api])
+      if (!api) return
+      // If loop is on, always allow, otherwise guard
+      if (opts?.loop || api.canScrollPrev()) {
+        api.scrollPrev()
+      }
+    }, [api, opts?.loop])
 
     const scrollNext = React.useCallback(() => {
-      api?.scrollNext()
-    }, [api])
+      if (!api) return
+      if (opts?.loop || api.canScrollNext()) {
+        api.scrollNext()
+      }
+    }, [api, opts?.loop])
 
     const handleKeyDown = React.useCallback(
       (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -111,14 +129,20 @@ const Carousel = React.forwardRef<
         return
       }
 
-      onSelect(api)
-      api.on("reInit", onSelect)
-      api.on("select", onSelect)
+      // Sync initial state and keep controls updated on every change
+      syncControls(api)
+      api.on("init", syncControls)
+      api.on("reInit", syncControls)
+      api.on("select", syncControls)
+      api.on("slidesChanged", syncControls)
 
       return () => {
-        api?.off("select", onSelect)
+        api?.off("init", syncControls)
+        api?.off("reInit", syncControls)
+        api?.off("select", syncControls)
+        api?.off("slidesChanged", syncControls)
       }
-    }, [api, onSelect])
+    }, [api, syncControls])
 
     return (
       <CarouselContext.Provider
@@ -132,6 +156,7 @@ const Carousel = React.forwardRef<
           scrollNext,
           canScrollPrev,
           canScrollNext,
+          slideCount,
         }}
       >
         <div
@@ -198,7 +223,7 @@ const CarouselPrevious = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof Button>
 >(({ className, variant = "outline", size = "icon", ...props }, ref) => {
-  const { orientation, scrollPrev, canScrollPrev } = useCarousel()
+  const { orientation, scrollPrev, canScrollPrev, slideCount } = useCarousel()
 
   return (
     <Button
@@ -206,13 +231,14 @@ const CarouselPrevious = React.forwardRef<
       variant={variant}
       size={size}
       className={cn(
-        "absolute  h-8 w-8 rounded-full",
+        "absolute z-10 h-10 w-10 rounded-full bg-white/90 shadow pointer-events-auto",
         orientation === "horizontal"
-          ? "-left-12 top-1/2 -translate-y-1/2"
-          : "-top-12 left-1/2 -translate-x-1/2 rotate-90",
+          ? "left-3 top-1/2 -translate-y-1/2"
+          : "top-3 left-1/2 -translate-x-1/2 rotate-90",
         className
       )}
-      disabled={!canScrollPrev}
+      // Only disable when there is a single slide
+      disabled={slideCount <= 1 ? true : !canScrollPrev}
       onClick={scrollPrev}
       {...props}
     >
@@ -227,7 +253,7 @@ const CarouselNext = React.forwardRef<
   HTMLButtonElement,
   React.ComponentProps<typeof Button>
 >(({ className, variant = "outline", size = "icon", ...props }, ref) => {
-  const { orientation, scrollNext, canScrollNext } = useCarousel()
+  const { orientation, scrollNext, canScrollNext, slideCount } = useCarousel()
 
   return (
     <Button
@@ -235,13 +261,13 @@ const CarouselNext = React.forwardRef<
       variant={variant}
       size={size}
       className={cn(
-        "absolute h-8 w-8 rounded-full",
+        "absolute z-10 h-10 w-10 rounded-full bg-white/90 shadow pointer-events-auto",
         orientation === "horizontal"
-          ? "-right-12 top-1/2 -translate-y-1/2"
-          : "-bottom-12 left-1/2 -translate-x-1/2 rotate-90",
+          ? "right-3 top-1/2 -translate-y-1/2"
+          : "bottom-3 left-1/2 -translate-x-1/2 rotate-90",
         className
       )}
-      disabled={!canScrollNext}
+      disabled={slideCount <= 1 ? true : !canScrollNext}
       onClick={scrollNext}
       {...props}
     >
